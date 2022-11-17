@@ -558,6 +558,66 @@ class Fragmenter(abc.ABC):
             a sequence of fragment pairs
         """  # noqa: DAR202
 
+class TotalFragmenter(Fragmenter):
+    def __init__(
+        self,
+        # What is needed here?
+        custom_logger: Optional[imit_logger.HierarchicalLogger] = None,
+    ):
+        super().__init__(custom_logger)
+
+    def __call__(
+        self,
+        trajectories: Sequence[TrajectoryWithRew],
+        fragment_length: int,
+        num_pairs: int,
+    ) -> Sequence[TrajectoryWithRewPair]:
+        fragments: List[TrajectoryWithRew] = []
+
+        prev_num_trajectories = len(trajectories)
+        # filter out all trajectories that are too short
+        # But we shouldn't be in this scenario.
+        # TODO check when this occurs given traj. of fixed len.
+        trajectories = [traj for traj in trajectories if len(traj) >= fragment_length]
+        if len(trajectories) == 0:
+            raise ValueError(
+                "No trajectories are long enough for the desired fragment length "
+                f"of {fragment_length}.",
+            )
+        num_discarded = prev_num_trajectories - len(trajectories)
+        if num_discarded:
+            self.logger.log(
+                f"Discarded {num_discarded} out of {prev_num_trajectories} "
+                "trajectories because they are shorter than the desired length "
+                f"of {fragment_length}.",
+            )
+
+        for traj in trajectories:
+            traj = traj[0]
+            for i in range(len(traj)):
+                start = i
+                end = start + fragment_length
+                terminal = (end == len(traj)) and traj.terminal
+                # What is traj.terminal?
+                fragment = TrajectoryWithRew(
+                    obs=traj.obs[start: end + 1],
+                    acts=traj.acts[start:end],
+                    infos=traj.infos[start:end] if traj.infos is not None else None,
+                    rews=traj.rews[start:end],
+                    terminal=terminal,
+                )
+                # TODO make into dictionary instead of simple list.
+                # Is it important to not compare within a trajectory?
+                fragments.append(fragment)
+
+        # fragments is currently a list of single fragments. We want to pair up
+        # fragments to get an intelligently ordered list of fragments for comparison
+        # TODO Pair fragments intelligently.
+        # iterator = iter(fragments)
+        # return list(zip(iterator, iterator))
+
+
+
 
 class RandomFragmenter(Fragmenter):
     """Sample fragments of trajectories uniformly at random with replacement.
